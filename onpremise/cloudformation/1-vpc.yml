@@ -1,0 +1,211 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: This template provision a VPC that emulates the On-premise environment.
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "Environment configuration"
+        Parameters:
+          - BusinessUnit
+          - Environment          
+      - Label:
+          default: VPC Configuration
+        Parameters:
+          - AvailabilityZone1
+          - pCidr
+    ParameterLabels:
+      BusinessUnit:
+        default: "Provides the Business Unit these resources"
+      Environment:
+        default: "Provides an environment (dev,test, prod)"
+      AvailabilityZone1:
+        default: "Provides an AVZ to deploy your subnets"
+      pCidr:
+        default: CIDR block for VPC and subnet        
+Parameters:
+  BusinessUnit:
+    Description: Defines the Business Unit that uses thes resources
+    Default: OnPremise
+    Type: String
+  Environment:
+    Description: Choose an environment where you want to create this stack
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - SIT
+      - UAT
+      - prod
+  AvailabilityZone1:
+      Description: Availability zone for the File gateway server
+      Type: AWS::EC2::AvailabilityZone::Name
+      Default: us-east-1a
+  pCidr:
+    Type: String
+    Default: 10.0.0.0/16
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$      
+Resources:
+  # Network
+  #-------------------------------------------------
+  OnPremVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref pCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags:
+        - Key: businessUnit
+          Value: !Ref BusinessUnit
+        - Key: environment
+          Value: !Ref Environment
+  OnPremPrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref OnPremVPC
+      AvailabilityZone: !Ref AvailabilityZone1
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: businessUnit
+          Value: !Ref BusinessUnit
+        - Key: environment
+          Value: !Ref Environment
+  OnPremPublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref OnPremVPC
+      AvailabilityZone: !Ref AvailabilityZone1
+      CidrBlock: 10.0.2.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: businessUnit
+          Value: !Ref BusinessUnit
+        - Key: environment
+          Value: !Ref Environment
+  # Route and NACL
+  #-------------------------------------------------
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref OnPremVPC
+      Tags:
+        - Key: businessUnit
+          Value: !Ref BusinessUnit
+        - Key: environment
+          Value: !Ref Environment
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayVpcAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref OnPremPublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref OnPremVPC
+      Tags:
+        - Key: businessUnit
+          Value: !Ref BusinessUnit
+        - Key: environment
+          Value: !Ref Environment
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      NatGatewayId: !Ref NatGateway
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref OnPremPrivateSubnet
+      RouteTableId: !Ref PrivateRouteTable          
+  # Internet connectivity
+  #-------------------------------------------------
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    DependsOn:
+      - "OnPremVPC"
+    Properties:
+      Tags:
+        - Key: businessUnit
+          Value: !Ref BusinessUnit
+        - Key: environment
+          Value: !Ref Environment
+  InternetGatewayVpcAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: 
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref OnPremVPC     
+  ## NAT GATEWAY
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    DependsOn: 
+      - OnPremVPC
+      - NatPublicIP
+      - InternetGateway
+    Properties:
+      SubnetId: !Ref OnPremPublicSubnet
+      AllocationId: !GetAtt NatPublicIP.AllocationId
+      Tags:
+        - Key: businessUnit
+          Value: !Ref BusinessUnit
+        - Key: environment
+          Value: !Ref Environment
+  ## ELASTIC IP
+  NatPublicIP:
+    Type: AWS::EC2::EIP
+    DependsOn: OnPremVPC
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: businessUnit
+          Value: !Ref BusinessUnit
+        - Key: environment
+          Value: !Ref Environment            
+# Monitoring
+# https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-resourcegroups-group.html
+  OnPremiseResourceGroup:
+    Type: AWS::ResourceGroups::Group
+    Properties:
+      Name: on_premise_group
+      Description: "On-premise resource group"
+      Tags:
+        - Key: businessUnit
+          Value: !Ref BusinessUnit
+        - Key: environment
+          Value: !Ref Environment      
+  ApplicationInsights:
+    Type: AWS::ApplicationInsights::Application 
+    Properties:
+      ResourceGroupName: !Ref OnPremiseResourceGroup
+      AutoConfigurationEnabled: true
+Outputs:
+  OnPremVPC:
+    Description: Cloud VPC
+    Value: !GetAtt OnPremVPC.VpcId
+    Export:      
+      Name: !Sub "${AWS::StackName}-OnPremVPC"
+  OnPremPublicSubnet:
+    Description: Public Subnet for Onpremise VPC
+    Value: !GetAtt OnPremPublicSubnet.SubnetId
+    Export:      
+      Name: !Sub "${AWS::StackName}-OnPremPublicSubnet"
+  OnPremPrivateSubnet:
+    Description: Private Subnet for Onpremise VPC
+    Value: !GetAtt OnPremPrivateSubnet.SubnetId
+    Export:      
+      Name: !Sub "${AWS::StackName}-OnPremPrivateSubnet"
+  OnPremVPCCidr:
+    Description: VPC CIDR
+    Value: !GetAtt OnPremVPC.CidrBlock
+    Export:      
+      Name: !Sub "${AWS::StackName}-OnPremVPCCidr"

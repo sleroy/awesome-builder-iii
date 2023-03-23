@@ -1,0 +1,56 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+# System Manager
+# SessionManager https://aws.amazon.com/blogs/mt/automated-configuration-of-session-manager-without-an-internet-gateway/
+  rSsmVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssm
+      VpcId: !Ref OnPremVPC
+      SubnetIds:
+        - !Ref OnPremPublicSubnet
+      SecurityGroupIds:
+        - !Ref rSecurityGroupVpcEndpoint
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: True
+  rSsmMessagesVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssmmessages
+      VpcId: !Ref OnPremVPC
+      SubnetIds:
+        - !Ref OnPremPublicSubnet
+      SecurityGroupIds:
+        - !Ref rSecurityGroupVpcEndpoint
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: True
+  rEc2MessagesVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ec2messages
+      VpcId: !Ref OnPremVPC
+      SubnetIds:
+        - !Ref OnPremPublicSubnet
+      SecurityGroupIds:
+        - !Ref rSecurityGroupVpcEndpoint
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: True
+  rSecurityGroupVpcEndpoint:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SG for VPC Endpoints
+      VpcId: !Ref rVpc
+      SecurityGroupIngress:
+      # The SSM Agent connects to Session Manager over TCP 443
+      - Description: allow inbound HTTPS from the EC2 instance
+        SourceSecurityGroupId: !Ref rSecurityGroupEc2Instance
+        FromPort: 443
+        ToPort: 443
+        IpProtocol: tcp
+      SecurityGroupEgress:
+      # The SSM Agent connects to Session Manager over TCP 443
+      - Description: allow outbound HTTPS to the VPC
+        CidrIp: !Ref pCidr 
+        FromPort: 443
+        ToPort: 443
+        IpProtocol: tcp
