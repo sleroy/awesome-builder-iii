@@ -32,8 +32,8 @@ export class CloudVpcStack extends cdk.Stack {
     };
 
     /** Unprocessed bucket and policy */
-    const unprocessedVideosBucket = new s3.Bucket(this, 'UnProcessedVideoBucket', {
-      bucketName: 'unprocessed-video-bucket',
+    const unprocessedVideosBucket = new s3.Bucket(this, `${id}-unprocessedvideo-bucket`, {
+      bucketName: `${this.account}-unprocessedvideo-bucket`,
       blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
       encryption: BucketEncryption.S3_MANAGED,
       enforceSSL: true,

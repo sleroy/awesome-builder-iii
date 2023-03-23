@@ -33,7 +33,7 @@ export const removeUnusedVideosLifecyclePolicy = function (days: number) {
         abortIncompleteMultipartUploadAfter: cdk.Duration.days(days),
         enabled: true,
         expiration: cdk.Duration.days(days),
-        expirationDate: new Date(),
+        //expirationDate: new Date(),
         expiredObjectDeleteMarker: false,
         id: 'expire-videos-after-30-days',
     };
