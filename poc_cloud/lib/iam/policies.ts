@@ -3,6 +3,7 @@ import * as cdk from 'aws-cdk-lib';
 import * as ec2 from "aws-cdk-lib/aws-ec2"
 import * as ecs from "aws-cdk-lib/aws-ecs"
 import { aws_s3 as s3, RemovalPolicy } from 'aws-cdk-lib';
+import { Bucket, BucketPolicy } from "aws-cdk-lib/aws-s3";
 
 // unprocessedVideosBucket.arnForObjects('*')
 
@@ -19,14 +20,27 @@ export const ipLimitPolicy = function (resources: string) {
 }
 
 
-export const s3AllPolicy = function () {
+export const s3AllPolicy = function (bucket: Bucket) {
     const policy = new iam.PolicyStatement({
         actions: ['s3:*'],
-        resources: [],
+        effect: iam.Effect.ALLOW,
+        resources: [`${bucket.bucketArn}/*`],
         principals: [new iam.AnyPrincipal()]
     });
     return policy;
 }
+
+export const removeInvalidUploadPolicy = function (days: number) {
+    const removeUnusedVideosLifecyclePolicy: s3.LifecycleRule = {
+        abortIncompleteMultipartUploadAfter: cdk.Duration.days(days),
+        enabled: true,
+        expiredObjectDeleteMarker: false,
+        id: `remove-incomplete-videos-after-${days}-days`,
+    };
+
+    return removeUnusedVideosLifecyclePolicy;
+};
+
 
 export const removeUnusedVideosLifecyclePolicy = function (days: number) {
     const removeUnusedVideosLifecyclePolicy: s3.LifecycleRule = {
@@ -35,7 +49,7 @@ export const removeUnusedVideosLifecyclePolicy = function (days: number) {
         expiration: cdk.Duration.days(days),
         //expirationDate: new Date(),
         expiredObjectDeleteMarker: false,
-        id: 'expire-videos-after-30-days',
+        id: `expire-videos-after-${days}-days`,
     };
 
     return removeUnusedVideosLifecyclePolicy;
