@@ -8,13 +8,13 @@ import { Construct } from 'constructs';
 import { VideoProcessingStack } from './video-processing-stack';
 import { VideoStorageStack } from './video-storage-stack';
 import { DevopsStack } from './devops-stack';
-import { EventBus } from 'aws-cdk-lib/aws-events';
+import { EventBus, IEventBus } from 'aws-cdk-lib/aws-events';
 
 export class CloudVpcStack extends cdk.Stack {
   videoProcessingStack: VideoProcessingStack;
   videoStorageStack: VideoStorageStack;
   devopsStack: DevopsStack;
-  bus: EventBus;
+  bus: IEventBus;
   busName: cdk.CfnOutput;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -22,21 +22,10 @@ export class CloudVpcStack extends cdk.Stack {
 
     // Core components
     // EventBridge
-    this.bus = new EventBus(this, 'VideoProcessingBus', {
-      eventBusName: `${id}-video-processing-event-bus`
-    });
-    this.bus.archive('VideoProcessingBusArchive', {
-      archiveName: 'VideoProcessingBusArchive',
-      description: 'VideoProcessingBus Archive',
-      eventPattern: {
-        //account: [cdk.Stack.of(this).account],
-      },
-      retention: cdk.Duration.days(365),
-    });
-
+    this.bus = EventBus.fromEventBusName(this, 'default-bus', 'default');
     this.videoStorageStack = new VideoStorageStack(this, id, props);
-    this.videoProcessingStack = new VideoProcessingStack(this, id, this.videoStorageStack, this.bus, props);
     this.devopsStack = new DevopsStack(this, id, props);
+    this.videoProcessingStack = new VideoProcessingStack(this, id, this.videoStorageStack, this.devopsStack, this.bus, props);
 
     // outputs
     this.busName = new cdk.CfnOutput(this, 'EventBusName', {

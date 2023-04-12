@@ -1,0 +1,1 @@
+wget https://file-examples.com/wp-content/uploads/2017/04/file_example_MP4_480_1_5MG.mp4 -o video.mp4 && for i in {1..5}; do aws s3 cp video.mp4 "s3://841493508515-upload-bucket/customer-abc/$i.mp4"; done

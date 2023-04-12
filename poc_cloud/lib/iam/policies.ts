@@ -55,4 +55,20 @@ export const removeUnusedVideosLifecyclePolicy = function (days: number) {
     return removeUnusedVideosLifecyclePolicy;
 };
 
+
+export const moveUnusedVideosToS3IA = function (days: number) {
+    const removeUnusedVideosLifecyclePolicy: s3.LifecycleRule = {
+        abortIncompleteMultipartUploadAfter: cdk.Duration.days(days),
+        enabled: true,
+        transitions: [{
+            storageClass:  s3.StorageClass.INFREQUENT_ACCESS,
+            // the properties below are optional
+            transitionAfter: cdk.Duration.days(days)          
+        }],
+        id: `move-unused-videos-after-${days}-days`,
+    };
+
+    return removeUnusedVideosLifecyclePolicy;
+};
+
 /****/

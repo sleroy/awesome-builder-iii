@@ -30,11 +30,12 @@ interface EcrPipeline {
 }
 
 export class DevopsStack {
+    ecsPipeline: EcrPipeline;
 
 
     constructor(private readonly stack: cdk.Stack, private id: string, private props?: cdk.StackProps) {
-        buildEcrPipeline("lambda", stack);
-        buildEcrPipeline("ecs", stack);
+        // buildEcrPipeline("lambda", stack);
+        this.ecsPipeline = buildEcrPipeline("ecs", stack);
     }
 
     /**
@@ -65,7 +66,7 @@ export class DevopsStack {
 
 }
 
-function buildEcrPipeline(purpose: String, stack: cdk.Stack): EcrPipeline {
+function buildEcrPipeline(purpose: string, stack: cdk.Stack): EcrPipeline {
 
     // The ECR repository we will get built by our Code Pipeline
     const ecr_repo = new ecr.Repository(stack, `ecr${purpose}ImageRepository`);
@@ -123,7 +124,7 @@ function buildEcrPipeline(purpose: String, stack: cdk.Stack): EcrPipeline {
     });
 
     project.addToRolePolicy(new iam.PolicyStatement({
-        resources: [ecr_repo.repositoryArn],
+        resources: ['*'], // This could be further scoped down, but to limit on an ECR blocks the login ecr_repo.repositoryArn
         actions: ['ecr:*'],         // This could be further scoped down...
         effect: iam.Effect.ALLOW
     }));

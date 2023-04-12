@@ -6,28 +6,24 @@ import * as subs from 'aws-cdk-lib/aws-sns-subscriptions';
 
 import { aws_s3 as s3 } from 'aws-cdk-lib';
 
-import { removeUnusedVideosLifecyclePolicy } from './iam/policies';
+import { moveUnusedVideosToS3IA, removeUnusedVideosLifecyclePolicy } from './iam/policies';
 import { createRegularBucket } from './buckets';
 
-interface QueueDefinition {
-    cnfId: string,
-    name: string,
-    description: string,
-    maxReceiveCount?: number
-}
 
 
 export class VideoStorageStack {
 
     uploadVideoBucket: s3.Bucket;
+    readyVideoBucket: s3.Bucket;
+    goldUsersVideoBucket: s3.Bucket;
 
     constructor(private readonly stack: cdk.Stack, private id: string, private props?: cdk.StackProps) {
 
-
-        this.uploadVideoBucket = createRegularBucket(stack, id, "upload-bucket", "Bucket for uploaded videos", null, [removeUnusedVideosLifecyclePolicy(30)]);
+        this.uploadVideoBucket = createRegularBucket(stack, id, "legacy-upload-bucket", "Bucket for uploaded videos -legacy", null, [removeUnusedVideosLifecyclePolicy(30)]);        
+        this.goldUsersVideoBucket = createRegularBucket(stack, id, "upload-bucket", "Bucket for uploaded videos automatic", null, [removeUnusedVideosLifecyclePolicy(30)]);
+        this.readyVideoBucket = createRegularBucket(stack, id, "readyvideo-bucket", "Bucket with ready videos", null, [moveUnusedVideosToS3IA(60)]);
         // Bind S3 Events to Topic
         //this.uploadVideoBucket.addEventNotification(s3.EventType.OBJECT_CREATED_PUT, new s3n.SnsDestination(this.videoUploadTopic));
-
 
     }
 
