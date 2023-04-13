@@ -3,24 +3,19 @@ import * as sqs from "aws-cdk-lib/aws-sqs";
 import * as cdk from 'aws-cdk-lib';
 import * as sfn from 'aws-cdk-lib/aws-stepfunctions';
 import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks';
-import { Construct } from 'constructs';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
-import * as ecsp from 'aws-cdk-lib/aws-ecs-patterns';
-import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import { Duration } from 'aws-cdk-lib';
 
 // unprocessedVideosBucket.arnForObjects('*')
 
 import { VideoStorageStack } from './video-storage-stack';
 import QueueDefinition from './queue-definition';
-import { EventBus, IEventBus, Rule } from 'aws-cdk-lib/aws-events';
+import { EventField, IEventBus, Rule, RuleTargetInput } from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import { DevopsStack } from './devops-stack';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { AutoScalingGroup } from "aws-cdk-lib/aws-autoscaling";
-
 
 export class VideoProcessingStack {
     s3VideoRole: cdk.aws_iam.Role;
@@ -31,11 +26,12 @@ export class VideoProcessingStack {
     videoUploadEventRule: cdk.aws_events.Rule;
     vpc: ec2.Vpc;
     ecsCluster: cdk.aws_ecs.Cluster;
-    stateMachine:  sfn.StateMachine;
+    stateMachine: sfn.StateMachine;
     asg: AutoScalingGroup;
     fargateTaskDefinition: cdk.aws_ecs.FargateTaskDefinition;
     containerDefinition: cdk.aws_ecs.ContainerDefinition;
     dlqQueueVideoProcessing: sqs.Queue;
+    stepFunctionLogGroup: cdk.aws_logs.LogGroup;
 
 
 
@@ -81,21 +77,21 @@ export class VideoProcessingStack {
 
         //this.videoUploadEventRule.addTarget(new targets.SfnStateMachine(machine: sfn.IStateMachine, props?: SfnStateMachineProps));
         //https://containers-cdk-react-amplify.ws.kabits.com/backend-containers-with-aws-cdk/creating-task/
-                
+
         this.ecsCluster = new ecs.Cluster(this.stack, "VideoProcessingCluster", {
-            vpc: this.vpc,            
+            vpc: this.vpc,
         });
         this.asg = new AutoScalingGroup(this.stack, "ASG", {
             instanceType: new ec2.InstanceType("t3.nano"),
             machineImage: ecs.EcsOptimizedImage.amazonLinux2(),
             associatePublicIpAddress: true,
-            maxCapacity: 3,
+            maxCapacity: 1,
             desiredCapacity: 0,
             minCapacity: 0,
             vpc: this.vpc,
             vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
             newInstancesProtectedFromScaleIn: false
-          })
+        })
         const myCapacityProvider = new ecs.AsgCapacityProvider(this.stack, 'VideoProcessorCapacityProvider', {
             autoScalingGroup: this.asg,
             enableManagedScaling: true,
@@ -118,7 +114,7 @@ export class VideoProcessingStack {
         });
 
         this.fargateTaskDefinition = new ecs.FargateTaskDefinition(this.stack, 'ApiTaskDefinition', {
-            memoryLimitMiB: 512,            
+            memoryLimitMiB: 512,
             cpu: 256,
         });
         this.fargateTaskDefinition.addToExecutionRolePolicy(executionRolePolicy);
@@ -191,30 +187,45 @@ export class VideoProcessingStack {
             retention: RetentionDays.ONE_DAY
         });
 
+
+        const eventPattern = {
+            detailType: ["Object Created"],
+            source: ["aws.s3"],
+            detail: {
+                bucket: {
+                    name: ["841493508515-upload-bucket"]
+                },
+                object: {
+                    key: [{ "exists": true }],
+                    size: [{ "exists": true }]
+                }
+            }
+        };
         // Let's send the events both to step functions and logs.
         this.videoUploadEventRule = new Rule(this.stack, 'VideoUploadS3EventRule', {
             ruleName: `${id}-${this.bus.eventBusName}-videoupload-rule`,
             description: 'Rule matching S3 video upload events',
             eventBus: this.bus,
-            eventPattern: {
-                source: ["aws.s3"],
-                detailType: ["Object Created"],
-                detail: {
-                    bucket: {
-                        name: [this.videoStorageStack.goldUsersVideoBucket.bucketName]
-                    }
-                }
-            },
+            eventPattern,
         });
-        
+
         this.videoUploadEventRule.addTarget(new targets.CloudWatchLogGroup(
             this.logGroup
         ));
+        const inputTransformer = {
+            _eventId: "VideoUploadEvent",
+            bucket: EventField.fromPath("$.detail.bucket.name"),
+            video: EventField.fromPath("$.detail.object.key"),
+            url: "s3://" + EventField.fromPath("$.detail.bucket.name") + "/" + EventField.fromPath("$.detail.object.key"),
+            generatedUrl: "s3://" + EventField.fromPath("$.detail.bucket.name") + "/" + EventField.fromPath("$.detail.object.key") + ".new",
+            size: EventField.fromPath("$.detail.object.size")
+        };
         this.videoUploadEventRule.addTarget(new targets.SfnStateMachine(
             this.stateMachine,
             {
+                input: RuleTargetInput.fromObject(inputTransformer),
                 //default event input:
-                retryAttempts:185,
+                retryAttempts: 185,
                 maxEventAge: Duration.hours(24),
                 deadLetterQueue: this.dlqQueueVideoProcessing
             }
@@ -222,23 +233,59 @@ export class VideoProcessingStack {
     }
 
 
+    /**
+     * {
+  "input": {
+    "_eventId": "VideoUploadEvent",
+    "bucket": "841493508515-upload-bucket",
+    "video": "customer-abc/5.mp4",
+    "url": "s3://841493508515-upload-bucket/customer-abc/5.mp4",
+    "size": 541
+  },
+  "inputDetails": {
+    "truncated": false
+  },
+  "roleArn": "arn:aws:iam::841493508515:role/CloudVpcStack-VideoProcessingStackMachineRole6773A-1JCZ3AFTEMMAB",
+  "stateMachineAliasArn": null,
+  "stateMachineVersionArn": null
+}
+     */
     prepareStateMachine() {
+        this.stepFunctionLogGroup = new LogGroup(this.stack, 'StepFunctionLoadGroup', {
+            logGroupName: `/aws/events/stepfunction-video`,
+            retention: RetentionDays.ONE_DAY
+        });
+
         const runTask = new tasks.EcsRunTask(this.stack, 'InvokeFFMpeg', {
             integrationPattern: sfn.IntegrationPattern.RUN_JOB,
             cluster: this.ecsCluster,
             taskDefinition: this.fargateTaskDefinition,
             assignPublicIp: true,
             containerOverrides: [{
-              containerDefinition: this.containerDefinition,
-              environment: [{ name: 'SOME_KEY', value: sfn.JsonPath.stringAt('$.SomeKey') }],
+                containerDefinition: this.containerDefinition,
+                environment: [
+                    { name: 'INPUT_VIDEO_FILE_URL', value: sfn.JsonPath.stringAt('$.url')},
+                    { name: 'FFMPEG_OPTIONS', value:  ""},
+                    { name: 'OUTPUT_FILENAME', value:  "/tmp/video.mp4"},
+                    { name: 'OUTPUT_S3_PATH', value:  sfn.JsonPath.stringAt('$.generatedUrl')},
+                    { name: 'AWS_REGION', value:  "us-east-1"}
+    
+                ],
             }],
             launchTarget: new tasks.EcsFargateLaunchTarget(),
-          });
+        });
 
         const definition = runTask.next(new sfn.Succeed(this.stack, "VideoProcessed"));
         //
         this.stateMachine = new sfn.StateMachine(this.stack, 'VideoProcessingStackMachine', {
-            definition: definition
+            definition: definition,
+            tracingEnabled: true,
+            logs: {
+                level: sfn.LogLevel.ALL,
+                includeExecutionData: true,
+                destination: this.stepFunctionLogGroup
+
+            }
         });
     }
 

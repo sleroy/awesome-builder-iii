@@ -1,27 +1,12 @@
 import * as cdk from 'aws-cdk-lib';
-import * as ec2 from "aws-cdk-lib/aws-ec2"
 import * as ecr from "aws-cdk-lib/aws-ecr"
-import * as sqs from "aws-cdk-lib/aws-sqs"
-import * as sns from "aws-cdk-lib/aws-sns"
-import * as s3n from "aws-cdk-lib/aws-s3-notifications"
-import * as ecs from "aws-cdk-lib/aws-ecs"
 import * as iam from "aws-cdk-lib/aws-iam"
-import * as subs from 'aws-cdk-lib/aws-sns-subscriptions';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as codebuild from "aws-cdk-lib/aws-codebuild";
 import * as codepipeline from "aws-cdk-lib/aws-codepipeline";
 import * as codepipeline_actions from "aws-cdk-lib/aws-codepipeline-actions";
-import * as cloudformation from "aws-cdk-lib/aws-cloudformation";
 import * as codecommit from "aws-cdk-lib/aws-codecommit";
 
-import { aws_s3 as s3, RemovalPolicy } from 'aws-cdk-lib';
 
-import { Construct } from 'constructs';
-import { BlockPublicAccess, BucketEncryption, StorageClass, Bucket, BucketNotificationDestinationConfig } from 'aws-cdk-lib/aws-s3';
-import { ArnPrincipal } from 'aws-cdk-lib/aws-iam';
-import { removeUnusedVideosLifecyclePolicy, s3AllPolicy } from './iam/policies';
-import { createBuckets, createRegularBucket } from './buckets';
-import { defineRoles } from './iam';
 
 interface EcrPipeline {
     ecr_repo: cdk.aws_ecr.Repository;

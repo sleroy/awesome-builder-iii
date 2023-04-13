@@ -1,8 +1,4 @@
 import * as cdk from 'aws-cdk-lib';
-import * as sqs from "aws-cdk-lib/aws-sqs";
-import * as sns from "aws-cdk-lib/aws-sns";
-import * as s3n from "aws-cdk-lib/aws-s3-notifications";
-import * as subs from 'aws-cdk-lib/aws-sns-subscriptions';
 
 import { aws_s3 as s3 } from 'aws-cdk-lib';
 
