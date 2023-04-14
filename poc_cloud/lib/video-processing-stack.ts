@@ -5,6 +5,7 @@ import * as sfn from 'aws-cdk-lib/aws-stepfunctions';
 import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
 import { Duration } from 'aws-cdk-lib';
+import * as Constants from './constants'
 
 // unprocessedVideosBucket.arnForObjects('*')
 
@@ -15,7 +16,8 @@ import * as targets from 'aws-cdk-lib/aws-events-targets';
 import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import { DevopsStack } from './devops-stack';
-import { AutoScalingGroup } from "aws-cdk-lib/aws-autoscaling";
+import { AutoScalingGroup, HealthCheck } from "aws-cdk-lib/aws-autoscaling";
+
 
 export class VideoProcessingStack {
     s3VideoRole: cdk.aws_iam.Role;
@@ -32,6 +34,8 @@ export class VideoProcessingStack {
     containerDefinition: cdk.aws_ecs.ContainerDefinition;
     dlqQueueVideoProcessing: sqs.Queue;
     stepFunctionLogGroup: cdk.aws_logs.LogGroup;
+    ecsClusterOutputName: cdk.CfnOutput;
+    ecsClusterOutputArn: cdk.CfnOutput;
 
 
 
@@ -80,25 +84,59 @@ export class VideoProcessingStack {
 
         this.ecsCluster = new ecs.Cluster(this.stack, "VideoProcessingCluster", {
             vpc: this.vpc,
+            enableFargateCapacityProviders: true,
+            containerInsights: true
         });
+        this.ecsClusterOutputName = new cdk.CfnOutput(this.stack, 'EcsClusterOutputName', {
+            value: this.ecsCluster.clusterName,
+            description: 'Name of the ECS Cluster'
+        });
+        this.ecsClusterOutputArn = new cdk.CfnOutput(this.stack, 'EcsClusterOutputArn', {
+            value: this.ecsCluster.clusterArn,
+            description: 'ARN of the ECS Cluster'
+        });
+
+        // https://dev.to/aws-builders/autoscaling-using-spot-instances-with-aws-cdk-ts-4hgh
+
+        // Add capacity to it
+        this.ecsCluster.addCapacity('DefaultAutoScalingGroupCapacity', {
+            instanceType: new ec2.InstanceType(Constants.instanceType),
+            desiredCapacity: Constants.default_desired_capacity,
+            maxCapacity: Constants.default_max_capacity,
+            minCapacity: Constants.default_min_capacity,
+            cooldown: Constants.cooldown,
+            machineImage: ecs.EcsOptimizedImage.amazonLinux2(),
+            spotPrice: "0.0209", // $0.0032 per Hour when writing, $0.0084 per Hour on-d
+            vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
+            healthCheck: HealthCheck.ec2(),
+        });
+
         this.asg = new AutoScalingGroup(this.stack, "ASG", {
-            instanceType: new ec2.InstanceType("t3.nano"),
+            instanceType: new ec2.InstanceType(Constants.instanceType),
             machineImage: ecs.EcsOptimizedImage.amazonLinux2(),
             associatePublicIpAddress: true,
-            maxCapacity: 1,
-            desiredCapacity: 0,
-            minCapacity: 0,
+            maxCapacity: Constants.asg_max_capacity,
+            desiredCapacity: Constants.asg_desired_capacity,
+            minCapacity: Constants.asg_min_capacity,
             vpc: this.vpc,
             vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
-            newInstancesProtectedFromScaleIn: false
+            newInstancesProtectedFromScaleIn: false,
+            healthCheck: HealthCheck.ec2(),
         })
-        const myCapacityProvider = new ecs.AsgCapacityProvider(this.stack, 'VideoProcessorCapacityProvider', {
+        const myCapacityProvider = new ecs.AsgCapacityProvider(this.stack, Constants.ASG_PROVIDER, {
             autoScalingGroup: this.asg,
             enableManagedScaling: true,
             enableManagedTerminationProtection: false,
-            targetCapacityPercent: 100
+            targetCapacityPercent: Constants.asg_targetCapacityPercent
         });
         this.ecsCluster.addAsgCapacityProvider(myCapacityProvider);
+        this.ecsCluster.addDefaultCapacityProviderStrategy([
+            { capacityProvider: "DefaultAutoScalingGroupCapacity", base: Constants.default_max_capacity, weight: 0 },
+            { capacityProvider: Constants.ASG_PROVIDER, base: Constants.asg_max_capacity, weight: 1 },
+            { capacityProvider: 'FARGATE', base: 2, weight: 50 },
+            { capacityProvider: 'FARGATE_SPOT', weight: 50 },
+        ]);
+
         const executionRolePolicy = new iam.PolicyStatement({
             effect: iam.Effect.ALLOW,
             resources: ['*'],
@@ -112,12 +150,19 @@ export class VideoProcessingStack {
                 "logs:PutLogEvents"
             ]
         });
-
+        // https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html
         this.fargateTaskDefinition = new ecs.FargateTaskDefinition(this.stack, 'ApiTaskDefinition', {
-            memoryLimitMiB: 512,
-            cpu: 256,
+            memoryLimitMiB: Constants.container_memoryLimitMiB,
+            cpu: Constants.container_cpu,
+            ephemeralStorageGiB: Constants.container_ephemeralStorageGiB,
+            runtimePlatform: {
+                operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
+                cpuArchitecture: ecs.CpuArchitecture.X86_64,
+            },
         });
+        // Permissions allowed to ECS container and fargate agent
         this.fargateTaskDefinition.addToExecutionRolePolicy(executionRolePolicy);
+        // Permissions allowed to ECS Containers.
         this.fargateTaskDefinition.addToTaskRolePolicy(new iam.PolicyStatement({
             effect: iam.Effect.ALLOW,
             resources: ['*'],
@@ -264,12 +309,12 @@ export class VideoProcessingStack {
             containerOverrides: [{
                 containerDefinition: this.containerDefinition,
                 environment: [
-                    { name: 'INPUT_VIDEO_FILE_URL', value: sfn.JsonPath.stringAt('$.url')},
-                    { name: 'FFMPEG_OPTIONS', value:  ""},
-                    { name: 'OUTPUT_FILENAME', value:  "/tmp/video.mp4"},
-                    { name: 'OUTPUT_S3_PATH', value:  sfn.JsonPath.stringAt('$.generatedUrl')},
-                    { name: 'AWS_REGION', value:  "us-east-1"}
-    
+                    { name: 'INPUT_VIDEO_FILE_URL', value: sfn.JsonPath.stringAt('$.url') },
+                    { name: 'FFMPEG_OPTIONS', value: "" },
+                    { name: 'OUTPUT_FILENAME', value: "/tmp/video.mp4" },
+                    { name: 'OUTPUT_S3_PATH', value: sfn.JsonPath.stringAt('$.generatedUrl') },
+                    { name: 'AWS_REGION', value: "us-east-1" }
+
                 ],
             }],
             launchTarget: new tasks.EcsFargateLaunchTarget(),
