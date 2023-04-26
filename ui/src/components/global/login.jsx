@@ -1,4 +1,18 @@
 export default function GlobalLogin({ block, dataBinding }) {
+
+  async function submit(e) {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const response = await fetch("/api/feedback", {
+      method: "POST",
+      body: formData,
+    });
+    const data = await response.json();
+    if (data.message) {
+      setResponseMessage(data.message);
+    }
+  }
+
   return (
     <section
       className="sing-up pt-md-20 pt-18 pb-md-20 pb-10"
@@ -9,7 +23,7 @@ export default function GlobalLogin({ block, dataBinding }) {
           <div className="col-xxl-7 col-lg-8 mx-auto">
             <div className="sing-up-body">
               <h2>{block.title}</h2>
-              <form className="sing-up-items row gy-4 gx-3">
+              <form className="sing-up-items row gy-4 gx-3" onSubmit={submit}>
                 <div className="col-md-12">
                   <label for="fullName" className="form-label">
                     {block.fullname.heading}
