@@ -19,3 +19,8 @@ export const container_ephemeralStorageGiB = 25;
 
 export const cooldown = Duration.minutes(5);
 export const ASG_PROVIDER = "VideoProcessorCapacityProvider";
+
+// Compute environment
+export const minvCpus = 0;
+export const desiredvCpus = 0;
+export const maxvCpus = 1;

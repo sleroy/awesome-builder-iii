@@ -5,7 +5,10 @@ import * as sfn from 'aws-cdk-lib/aws-stepfunctions';
 import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
 import { Duration } from 'aws-cdk-lib';
-import * as Constants from './constants'
+import * as Constants from './constants';
+import * as batch from 'aws-cdk-lib/aws-batch';
+
+
 
 // unprocessedVideosBucket.arnForObjects('*')
 
@@ -17,6 +20,12 @@ import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import { DevopsStack } from './devops-stack';
 import { AutoScalingGroup, HealthCheck } from "aws-cdk-lib/aws-autoscaling";
+
+
+const jobDefinitionName = "ffmpeg-definition";
+const computeEnvironmentName = "compute-environment";
+const computeEnvironmentFargateSpotName = "compute-environment-fargate-spot";
+const jobQueueName = "video-processing-queue";
 
 
 export class VideoProcessingStack {
@@ -36,6 +45,15 @@ export class VideoProcessingStack {
     stepFunctionLogGroup: cdk.aws_logs.LogGroup;
     ecsClusterOutputName: cdk.CfnOutput;
     ecsClusterOutputArn: cdk.CfnOutput;
+    stsAssumeRoleStatement: iam.PolicyStatement;
+    jobSubmitStatement: iam.PolicyStatement;
+    batchServiceRole: iam.Role;
+    batchInstanceRole: iam.Role;
+    sg: cdk.aws_ec2.SecurityGroup;
+    jobDefinition: cdk.aws_batch.CfnJobDefinition;
+    computeEnvironment: cdk.aws_batch.CfnComputeEnvironment;
+    jobQueue: cdk.aws_batch.CfnJobQueue;
+    computeEnvironmentFarGateSpot: cdk.aws_batch.CfnComputeEnvironment;
 
 
 
@@ -70,13 +88,143 @@ export class VideoProcessingStack {
             name: "QueueDLQVideoUploadEvent"
         });
 
-        this.createEcsClusterFargate(id);
+        this.createBatchJobQueue(id);
+        //this.createEcsClusterFargate(id);
         this.prepareStateMachine()
         this.linkGoldUsersBucketToEventBridge(id);
 
 
 
     }
+    createBatchJobQueue(id: string) {
+        this.stsAssumeRoleStatement = new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: ["sts:AssumeRole"],
+            resources: ["*"]
+        });
+
+        this.jobSubmitStatement = new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: ["batch:SubmitJob"],
+            resources: ["*"]
+        });
+
+        this.batchServiceRole = new iam.Role(this.stack, "service-role", {
+            assumedBy: new iam.ServicePrincipal("batch.amazonaws.com"),
+            managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName("service-role/AWSBatchServiceRole")],
+        });
+        this.batchServiceRole.addToPolicy(this.stsAssumeRoleStatement);
+
+        this.batchInstanceRole = new iam.Role(this.stack, "instance-role", {
+            assumedBy: new iam.ServicePrincipal("ec2.amazonaws.com"),
+            managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName("service-role/AmazonEC2ContainerServiceforEC2Role")],
+        });
+        this.batchInstanceRole.addToPolicy(this.stsAssumeRoleStatement);
+
+        const instanceProfile = new iam.CfnInstanceProfile(this.stack, "instance-profile", {
+            instanceProfileName: "batch-instance-profile",
+            roles: [
+                this.batchInstanceRole.roleName
+            ]
+        });
+
+        this.sg = new ec2.SecurityGroup(this.stack, "sg", {
+            securityGroupName: "batch-sg",
+            vpc:this.vpc
+        });
+        this.jobDefinition = new batch.CfnJobDefinition(this.stack, "job-definition", {
+            jobDefinitionName,
+            type: "Container",
+            containerProperties: {
+                // Use an image from Amazon ECR
+                image: ecs.ContainerImage.fromEcrRepository(this.devopsStack.ecsPipeline.ecr_repo).imageName,
+                //logConfiguration: ecs.LogDrivers.awsLogs({ streamPrefix: 'video-api' }),
+                environment: [
+                    {name: "INPUT_VIDEO_FILE_URL",value: "s3://841493508515-upload-bucket/file_example_MP4_1920_18MG.mp4"},
+                    {name: "FFMPEG_OPTIONS",value: ""},
+                    {name: "OUTPUT_FILENAME",value: "/tmp/video.mp4"},
+                    {name: "OUTPUT_S3_PATH",value: this.videoStorageStack.uploadVideoBucket.s3UrlForObject("/generated/video.mp4")},
+                    {name: "OUTPUT_BUCKET",value: "s3://"},
+                    {name: "OUTPUT_VIDEO",value: ""},
+                    {name: "RESOLUTION",value: "160"},
+                    {name: "AWS_REGION",value: "us-east-1"}
+                ],
+                vcpus: 2,
+                memory: 2048
+            },
+            retryStrategy: {
+                attempts: 3
+            },
+            timeout: {
+                attemptDurationSeconds: 60
+            }
+        });
+        const spotfleet_role = new iam.Role(this.stack, 'AmazonEC2SpotFleetRole', {
+            assumedBy: new iam.ServicePrincipal('spotfleet.amazonaws.com'),
+            managedPolicies: [
+                iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonEC2SpotFleetTaggingRole'),
+            ],
+        });
+        this.computeEnvironment = new batch.CfnComputeEnvironment(this.stack, "compute-environment", {
+            computeEnvironmentName,
+            computeResources: {
+                allocationStrategy: "BEST_FIT_PROGRESSIVE",
+                minvCpus: Constants.minvCpus,
+                desiredvCpus: Constants.desiredvCpus,
+                maxvCpus: Constants.maxvCpus,
+                instanceTypes: [
+                    "optimal"
+                ],
+                instanceRole: instanceProfile.attrArn,
+                type: "EC2",
+                subnets: this.vpc.publicSubnets.map(x=>x.subnetId),
+                securityGroupIds: [this.sg.securityGroupId]
+            },
+            serviceRole: this.batchServiceRole.roleArn,
+            type: "FARGATE",
+            state: "ENABLED"
+        });
+        this.computeEnvironment.addDependsOn(instanceProfile);
+
+        this.computeEnvironmentFarGateSpot = new batch.CfnComputeEnvironment(this.stack, "compute-environment-fargate-spot", {
+            computeEnvironmentName: computeEnvironmentFargateSpotName,
+            computeResources: {
+                allocationStrategy: "BEST_FIT_PROGRESSIVE",
+                minvCpus: Constants.minvCpus,
+                desiredvCpus: 0,
+                maxvCpus: 10,
+                bidPercentage: 40,
+                spotIamFleetRole: spotfleet_role.roleName,
+                instanceTypes: [
+                    "optimal"
+                ],
+                instanceRole: instanceProfile.attrArn,
+                type: "EC2",
+                subnets: this.vpc.publicSubnets.map(x=>x.subnetId),
+                securityGroupIds: [this.sg.securityGroupId]
+            },
+            serviceRole: this.batchServiceRole.roleArn,
+            type: "FARGATE_SPOT",
+            state: "ENABLED"
+        });
+        this.computeEnvironmentFarGateSpot.addDependsOn(instanceProfile);
+
+        this.jobQueue = new batch.CfnJobQueue(this.stack, "job-queue", {
+            jobQueueName,
+            priority: 1,
+            state: "ENABLED",
+            computeEnvironmentOrder: [
+                {order: 1, computeEnvironment: this.computeEnvironment.computeEnvironmentName as string},
+                {order: 2, computeEnvironment: this.computeEnvironmentFarGateSpot.computeEnvironmentName as string}
+            ]
+        });
+        this.jobQueue.addDependsOn(this.computeEnvironment);
+        this.jobQueue.addDependsOn(this.computeEnvironmentFarGateSpot);
+
+    }
+
+
+
     createEcsClusterFargate(id: string) {
 
         //this.videoUploadEventRule.addTarget(new targets.SfnStateMachine(machine: sfn.IStateMachine, props?: SfnStateMachineProps));
@@ -110,7 +258,6 @@ export class VideoProcessingStack {
             vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
             healthCheck: HealthCheck.ec2(),
         });
-
         this.asg = new AutoScalingGroup(this.stack, "ASG", {
             instanceType: new ec2.InstanceType(Constants.instanceType),
             machineImage: ecs.EcsOptimizedImage.amazonLinux2(),
@@ -129,10 +276,11 @@ export class VideoProcessingStack {
             enableManagedTerminationProtection: false,
             targetCapacityPercent: Constants.asg_targetCapacityPercent
         });
+
         this.ecsCluster.addAsgCapacityProvider(myCapacityProvider);
         this.ecsCluster.addDefaultCapacityProviderStrategy([
-            { capacityProvider: "DefaultAutoScalingGroupCapacity", base: Constants.default_max_capacity, weight: 0 },
-            { capacityProvider: Constants.ASG_PROVIDER, base: Constants.asg_max_capacity, weight: 1 },
+//            { capacityProvider: "DefaultAutoScalingGroupCapacity", base: Constants.default_max_capacity, weight: 0 },
+          // { capacityProvider: Constants.ASG_PROVIDER, base: Constants.asg_max_capacity, weight: 1 },
             { capacityProvider: 'FARGATE', base: 2, weight: 50 },
             { capacityProvider: 'FARGATE_SPOT', weight: 50 },
         ]);
@@ -172,13 +320,16 @@ export class VideoProcessingStack {
 
         this.containerDefinition = this.fargateTaskDefinition.addContainer("video-processing", {
             // Use an image from Amazon ECR
-            image: ecs.ContainerImage.fromRegistry(this.devopsStack.ecsPipeline.ecr_repo.repositoryUri),
+            image: ecs.ContainerImage.fromEcrRepository(this.devopsStack.ecsPipeline.ecr_repo),
             logging: ecs.LogDrivers.awsLogs({ streamPrefix: 'video-api' }),
             environment: {
                 INPUT_VIDEO_FILE_URL: "s3://841493508515-upload-bucket/file_example_MP4_1920_18MG.mp4",
                 FFMPEG_OPTIONS: "",
                 OUTPUT_FILENAME: "/tmp/video.mp4",
                 OUTPUT_S3_PATH: this.videoStorageStack.uploadVideoBucket.s3UrlForObject("/generated/video.mp4"),
+                OUTPUT_BUCKE: "s3://",
+                OUTPUT_VIDEO: "",
+                RESOLUTION: ".160",
                 AWS_REGION: "us-east-1"
             }
             // ... other options here ...
@@ -262,7 +413,6 @@ export class VideoProcessingStack {
             bucket: EventField.fromPath("$.detail.bucket.name"),
             video: EventField.fromPath("$.detail.object.key"),
             url: "s3://" + EventField.fromPath("$.detail.bucket.name") + "/" + EventField.fromPath("$.detail.object.key"),
-            generatedUrl: "s3://" + EventField.fromPath("$.detail.bucket.name") + "/" + EventField.fromPath("$.detail.object.key") + ".new",
             size: EventField.fromPath("$.detail.object.size")
         };
         this.videoUploadEventRule.addTarget(new targets.SfnStateMachine(
@@ -301,26 +451,16 @@ export class VideoProcessingStack {
             retention: RetentionDays.ONE_DAY
         });
 
-        const runTask = new tasks.EcsRunTask(this.stack, 'InvokeFFMpeg', {
-            integrationPattern: sfn.IntegrationPattern.RUN_JOB,
-            cluster: this.ecsCluster,
-            taskDefinition: this.fargateTaskDefinition,
-            assignPublicIp: true,
-            containerOverrides: [{
-                containerDefinition: this.containerDefinition,
-                environment: [
-                    { name: 'INPUT_VIDEO_FILE_URL', value: sfn.JsonPath.stringAt('$.url') },
-                    { name: 'FFMPEG_OPTIONS', value: "" },
-                    { name: 'OUTPUT_FILENAME', value: "/tmp/video.mp4" },
-                    { name: 'OUTPUT_S3_PATH', value: sfn.JsonPath.stringAt('$.generatedUrl') },
-                    { name: 'AWS_REGION', value: "us-east-1" }
+        const parallel = new sfn.Parallel(this.stack, "ParallelEncodingActivity", {comment : "Orchestrate parallel encoding activity"})
+        parallel.branch(
+            this.encodingBatch(160),
+            this.encodingBatch(360),
+            this.encodingBatch(480),
+            this.encodingBatch(720),
+            this.encodingBatch(1080),
+        );
 
-                ],
-            }],
-            launchTarget: new tasks.EcsFargateLaunchTarget(),
-        });
-
-        const definition = runTask.next(new sfn.Succeed(this.stack, "VideoProcessed"));
+        const definition = parallel.next(new sfn.Succeed(this.stack, "EncodingPerformed"));
         //
         this.stateMachine = new sfn.StateMachine(this.stack, 'VideoProcessingStackMachine', {
             definition: definition,
@@ -334,6 +474,52 @@ export class VideoProcessingStack {
         });
     }
 
+    encodingBatch(resolution: number): cdk.aws_stepfunctions.IChainable {
+        return new tasks.BatchSubmitJob(this.stack, 'InvokeFFMpegUsingBatch' + resolution, {
+            jobDefinitionArn: this.jobDefinition.ref,
+            jobName: "InvokeFFMpeg_resolution_" + resolution,
+            jobQueueArn: this.jobQueue.attrJobQueueArn,
+            attempts:1,
+            containerOverrides: {
+                memory:cdk.Size.mebibytes(Math.max(Math.round(512*resolution / 160), 512)),
+                vcpus: Math.max(Math.round(0.5*resolution / 160), 0.5),
+                environment: {
+                    'INPUT_VIDEO_FILE_URL': sfn.JsonPath.stringAt('$.url'),
+                    'FFMPEG_OPTIONS': " -vf scale=-1:"+  resolution+ " -crf 18 -preset slow -c:a copy ",
+                    'OUTPUT_FILENAME': "/tmp/video"+resolution + ".mp4",
+                    'OUTPUT_BUCKET': sfn.JsonPath.stringAt('$.bucket'),
+                    'OUTPUT_VIDEO': sfn.JsonPath.stringAt('$.video'),
+                    'RESOLUTION': resolution.toString(),
+                    'AWS_REGION': "us-east-1"
+                },
+            },
+        });
+    }
+
+
+    private encodingECS(resolution: number): tasks.EcsRunTask {
+        return new tasks.EcsRunTask(this.stack, 'InvokeFFMpeg_resolution_' + resolution, {
+            integrationPattern: sfn.IntegrationPattern.RUN_JOB,
+            cluster: this.ecsCluster,
+            taskDefinition: this.fargateTaskDefinition,
+            assignPublicIp: true,
+            containerOverrides: [{
+                memoryLimit: Math.max(Math.round(512*resolution / 160), 512),
+                cpu: Math.max(Math.round(256*resolution / 160), 256),
+                containerDefinition: this.containerDefinition,
+                environment: [
+                    { name: 'INPUT_VIDEO_FILE_URL', value: sfn.JsonPath.stringAt('$.url') },
+                    { name: 'FFMPEG_OPTIONS', value: " -vf scale=-1:"+  resolution+ " -crf 18 -preset slow -c:a copy " },
+                    { name: 'OUTPUT_FILENAME', value: "/tmp/video"+resolution + ".mp4" },
+                    { name: 'OUTPUT_BUCKET', value: sfn.JsonPath.stringAt('$.bucket') },
+                    { name: 'OUTPUT_VIDEO', value: sfn.JsonPath.stringAt('$.video') },
+                    { name: 'RESOLUTION', value: "." + resolution.toString()},
+                    { name: 'AWS_REGION', value: "us-east-1" }
+                ],
+            }],
+            launchTarget: new tasks.EcsFargateLaunchTarget(),
+        });
+    }
 
     private createStdQueue(def: QueueDefinition): cdk.aws_sqs.Queue {
         const queue = new sqs.Queue(this.stack, def.name);
