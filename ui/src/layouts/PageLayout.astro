@@ -1,0 +1,36 @@
+---
+import Blocks from "@components/blocks";
+import type { MarkdownLayoutProps } from "astro";
+import Layout, { SEOProps } from "./Layout.astro";
+
+type Props =
+  | {
+      title: string;
+      content_blocks: Array<Record<string, any>>;
+      seo?: SEOProps;
+    }
+  | MarkdownLayoutProps<{
+      title: string;
+      content_blocks: Array<Record<string, any>>;
+      seo?: SEOProps;
+    }>;
+
+const props = Astro.props.frontmatter ?? Astro.props;
+const liveRender = import.meta.env.PUBLIC_LIVE_RENDER === "true";
+---
+
+<Layout {...props}>
+  <main>
+    {
+      liveRender ? (
+        <Blocks
+          contentBlocks={props.content_blocks}
+          client:load
+          dataBinding="#content_blocks"
+        />
+      ) : (
+        <Blocks contentBlocks={props.content_blocks} dataBinding={null} />
+      )
+    }
+  </main>
+</Layout>
