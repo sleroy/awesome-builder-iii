@@ -2,7 +2,7 @@
 import Logo from "@components/Logo.astro";
 import { nav_button } from "@config/config.json";
 import menu from "@config/menu.json";
-
+import SigninButton from "./SigninButton.vue";
 const pathname = new URL(Astro.request.url).pathname;
 
 export interface ChildNavigationLink {
@@ -21,7 +21,7 @@ const { main }: { main: NavigationLink[] } = menu;
 ---
 
 <header class="header">
-  <nav class="navbar container">
+  <nav class="container navbar">
     <!-- logo -->
     <div class="order-0">
       <Logo />
@@ -31,7 +31,7 @@ const { main }: { main: NavigationLink[] } = menu;
     <label
       id="show-button"
       for="nav-toggle"
-      class="order-2 flex cursor-pointer items-center md:order-1 md:hidden"
+      class="flex items-center order-2 cursor-pointer md:order-1 md:hidden"
     >
       <svg class="h-6 fill-current" viewBox="0 0 20 20">
         <title>Menu Open</title>
@@ -41,7 +41,7 @@ const { main }: { main: NavigationLink[] } = menu;
     <label
       id="hide-button"
       for="nav-toggle"
-      class="order-2 cursor-pointer items-center md:order-1"
+      class="items-center order-2 cursor-pointer md:order-1"
     >
       <svg class="h-6 fill-current" viewBox="0 0 20 20">
         <title>Menu Close</title>
@@ -54,20 +54,20 @@ const { main }: { main: NavigationLink[] } = menu;
 
     <ul
       id="nav-menu"
-      class="navbar-nav order-3 hidden w-full md:order-1 md:flex md:w-auto md:space-x-3"
+      class="order-3 hidden w-full navbar-nav md:order-1 md:flex md:w-auto md:space-x-3"
     >
       {
         main.map((menu) => (
           <>
             {menu.hasChildren ? (
-              <li class="nav-item nav-dropdown group relative">
-                <span class="nav-link inline-flex items-center">
+              <li class="relative nav-item nav-dropdown group">
+                <span class="inline-flex items-center nav-link">
                   {menu.name}
-                  <svg class="h-4 w-4 fill-current" viewBox="0 0 20 20">
+                  <svg class="w-4 h-4 fill-current" viewBox="0 0 20 20">
                     <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
                   </svg>
                 </span>
-                <ul class="nav-dropdown-list hidden group-hover:block md:invisible md:absolute md:block md:opacity-0 md:group-hover:visible md:group-hover:opacity-100">
+                <ul class="hidden nav-dropdown-list group-hover:block md:invisible md:absolute md:block md:opacity-0 md:group-hover:visible md:group-hover:opacity-100">
                   {menu.children?.map((child) => (
                     <li class="nav-dropdown-item">
                       <a
@@ -100,12 +100,7 @@ const { main }: { main: NavigationLink[] } = menu;
       {
         nav_button.enable && (
           <div class="block md:hidden">
-            <a
-              class="btn btn-primary z-0 ml-auto py-[14px]"
-              href={nav_button.link}
-            >
-              {nav_button.label}
-            </a>
+            <SigninButton />
           </div>
         )
       }
@@ -113,12 +108,12 @@ const { main }: { main: NavigationLink[] } = menu;
     {
       nav_button.enable && (
         <div class="order-1 ml-auto hidden items-center md:order-2 md:ml-0 md:flex md:min-w-[150px] lg:min-w-[200px]">
-          <a
-            class="btn btn-primary z-0 ml-auto py-[14px]"
-            href={nav_button.link}
-          >
-            {nav_button.label}
-          </a>
+          <SigninButton
+            client:load
+            lbl_signin={nav_button.signin_label}
+            lbl_signout={nav_button.signout_label}
+            url_signin={nav_button.signin_link}
+          />
         </div>
       )
     }

@@ -19,8 +19,10 @@
 
   "nav_button": {
     "enable": true,
-    "label": "Sign in",
-    "link": "/signin"
+    "signin_label": "Sign in",
+    "signout_label": "Sign out",
+    "signin_link": "/signin",
+    "signout_link": "/signout"
   },
 
   "params": {

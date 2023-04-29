@@ -1,6 +1,7 @@
 import image from "@astrojs/image";
 import mdx from "@astrojs/mdx";
 import react from "@astrojs/react";
+import vue from "@astrojs/vue";
 import sitemap from "@astrojs/sitemap";
 import tailwind from "@astrojs/tailwind";
 import AutoImport from "astro-auto-import";
@@ -16,6 +17,7 @@ export default defineConfig({
   trailingSlash: config.site.trailing_slash ? "always" : "never",
   integrations: [
     react(),
+    vue(),
     sitemap(),
     tailwind({
       config: {
@@ -36,6 +38,18 @@ export default defineConfig({
     }),
     mdx(),
   ],
+  vite: {
+    ssr: {
+      noExternal: ["@aws-amplify/*", "@radix-ui/*"],
+    },
+    optimizeDeps: {
+      esbuildOptions: {
+        define: {
+          global: "globalThis",
+        },
+      },
+    },
+  },
   markdown: {
     remarkPlugins: [
       remarkToc,
