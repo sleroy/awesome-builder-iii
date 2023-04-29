@@ -8,10 +8,11 @@ phases:
   pre_build:
     commands:
       - echo Installing source NPM dependencies...
-      - npm install
+      - npm -v
   build:
     commands:
       - echo Build started on `date`
+      - npm install      
       - npm run build
   post_build:
     commands:
