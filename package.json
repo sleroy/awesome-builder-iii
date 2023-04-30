@@ -27,7 +27,8 @@
     "remark-collapse": "^0.1.2",
     "remark-toc": "^8.0.1",
     "swiper": "^9.1.0",
-    "vue": "^3.2.47"
+    "vue": "^3.2.47",
+    "vue3-dropzone": "^2.0.1"
   },
   "devDependencies": {
     "@astrojs/react": "^2.1.0",

@@ -40,7 +40,7 @@ export default defineConfig({
   ],
   vite: {
     ssr: {
-      noExternal: ["@aws-amplify/*", "@radix-ui/*"],
+      noExternal: ["@aws-amplify/*", "@radix-ui/*", "amazon-cognito-identity-js"],
     },
     optimizeDeps: {
       esbuildOptions: {

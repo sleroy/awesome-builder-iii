@@ -42,6 +42,22 @@
             </div>
             <div>
               <label
+                for="nickname"
+                class="block mb-2 text-sm font-medium text-gray-900 dark:text-white"
+                >Username</label
+              >
+              <input
+                type="nickname"
+                name="nickname"
+                id="nickname"
+                v-model="nickname"
+                class="focus:ring-primary-600 focus:border-primary-600 block w-full rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400 dark:focus:border-blue-500 dark:focus:ring-blue-500 sm:text-sm"
+                placeholder="username"
+                required=""
+              />
+            </div>
+            <div>
+              <label
                 for="password"
                 class="block mb-2 text-sm font-medium text-gray-900 dark:text-white"
                 >Password</label
@@ -95,9 +111,6 @@
                 >Sign up</a
               >
             </p>
-            <p v-if="error">
-            Authentication failed!
-            </p>
           </form>
         </div>
       </div>
@@ -106,46 +119,92 @@
 </template>
 
 <script lang="ts">
-import { Auth } from 'aws-amplify';
-import { isSessionValid } from '../../auth/userPool';
-
-interface Data {
-  email: string;
-  password: string;
-  rememberme: boolean;
-  error: boolean;
-  authError: any;
-  inProgress: boolean
-}
+import { userPool, isSessionValid } from '../../auth/userPool';
 
 export default {
   setup() {},
-  data(): Data {
+  data() {
     return {
       email: "",
+      nickname: "",
       password: "",
       rememberme: false,
       error: false,
-      authError: undefined,
       inProgress: false,
     };
   },
   computed: {
+    userData() {
+      var userData = {
+            Username: this.email,
+            Pool: userPool,
+          };
+          return userData;
+    }
   },
   mounted() {
-    isSessionValid().then((r) => { if (r) window.open("/video/upload", "_self")})
+    let isLogged = isSessionValid();
+    if (isLogged) {
+      window.open("/video/upload", "_self")
+    }
   },
   methods: {
 
     async login() {
       try {
-        const user = await Auth.signIn(this.email, this.password);
-        console.log("User is authenticated", user)
-        window.open("/video/upload", "_self")
-      } catch (err) {
-        console.error('error signing in', err);
+        var cognitoUser = userPool.getCurrentUser();
+        console.log(cognitoUser);
+        if (!isSessionValid()) {
+          this.inProgress = true;
+          var authenticationData = {
+            Username: this.email,
+            Password: this.password,
+            nickname: this.nickname,
+          };
+          var authenticationDetails = new AmazonCognitoIdentity.AuthenticationDetails(authenticationData);
+
+          const me = this;
+          let cognitoUser: AmazonCognitoIdentity.CognitoUser = new AmazonCognitoIdentity.CognitoUser(this.userData);
+          cognitoUser.authenticateUser(authenticationDetails, {
+            onSuccess: function (
+              session: AmazonCognitoIdentity.CognitoUserSession,
+              userConfirmationNecessary?: boolean
+            ) {
+              var accessToken = session.getAccessToken().getJwtToken();
+              var idToken = session.getIdToken().getJwtToken();
+              console.log("Authentication success", accessToken, idToken);
+
+              localStorage.setItem("access-token", accessToken);
+              localStorage.setItem("id-token", idToken);
+              window.open("/video/upload", "_self")
+              me.inProgress = false;
+
+            },
+            newPasswordRequired: function (userAttributes, requiredAttributes) {
+              /**delete userAttributes.email_verified;
+              cognitoUser.completeNewPasswordChallenge(
+                "DemoPassword1!",
+                userAttributes,
+                {
+                  onSuccess: (data) => {
+                    console.log("Password has been updated", data);
+                  },
+                  onFailure: function (err) {
+                    alert("Cannot change the password " + err);
+                  },
+                }
+              );
+              **/
+              alert("User has to change its password")
+            },
+            onFailure: function (err) {
+              me.inProgress = false;
+              alert(err);
+            },
+          });
+        }
+      } catch {
         this.error = true;
-        this.authError = err;
       }
     },
   },

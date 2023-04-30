@@ -5,44 +5,42 @@
 </template>
 
 <script lang="ts">
-import * as AmazonCognitoIdentity from "amazon-cognito-identity-js";
-import { userPool, isSessionValid } from "../../auth/userPool";
+import { Auth } from "aws-amplify";
+import { isSessionValid } from "../../auth/userPool";
 
 interface Data {
   isLoggedIn: boolean;
-  user: null | AmazonCognitoIdentity.CognitoUser;
 }
 
 export default {
-  props: ["lbl_signin", "lbl_signout", "url_signin"],
+  props: ["lbl_signin", "lbl_signout", "url_signin", "url_signout"],
   created() {},
   data(): Data {
     return {
       isLoggedIn: false,
-      user: null,
     };
   },
   mounted() {
-    this.user = userPool.getCurrentUser();
-    this.isLoggedIn = isSessionValid();
+    isSessionValid().then((r) => this.isLoggedIn = r)
   },
   methods: {
-    action: function () {
+    action: async function () {
       if (this.isLoggedIn) {
-        const user: AmazonCognitoIdentity.CognitoUser | null =
-          userPool.getCurrentUser();
-        if (user != null) {
-          user.signOut(() => {
-            console.log("Sign out");
-            window.open("/", "_self")
-          });
-        }
+        await this.signOut()
         this.isLoggedIn = false;
+        window.open(this.url_signout, "_self");
       } else {
         this.isLoggedIn = false;
         window.open(this.url_signin, "_self");
       }
     },
+    signOut: async function () {
+      try {
+        await Auth.signOut({ global: true });
+      } catch (error) {
+        console.log('error signing out: ', error);
+      }
+    }
   },
 };
 </script>

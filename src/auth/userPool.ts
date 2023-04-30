@@ -1,27 +1,17 @@
 /**
  * Declare Cognito User pool.
  */
-import * as AmazonCognitoIdentity from "amazon-cognito-identity-js";
-var poolData = {
-  //UserPoolId: "us-east-",
-  //ClientId: "",
-};
-export const userPool = new AmazonCognitoIdentity.CognitoUserPool(poolData);
+import { Amplify, Auth } from 'aws-amplify';
+import awsmobile from '../aws-exports';
 
-export function isSessionValid() {
-  const cognitoUser = userPool.getCurrentUser();
+Amplify.configure(awsmobile);
 
-  let isSessionValid = false;
 
-  if (cognitoUser) {
-    cognitoUser.getSession((err: any, result: AmazonCognitoIdentity.CognitoUserSession) => {
-      if (!err) {
-        isSessionValid = result.isValid();
-      } else {
-        console.error("Session cannot be checked")
-      }
-    });
-  }
-
-  return isSessionValid;
+export async function isSessionValid() {
+    try {
+        await Auth.currentAuthenticatedUser();
+        return true;
+    } catch {
+        return false;
+    }
 }
