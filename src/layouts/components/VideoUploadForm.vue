@@ -40,7 +40,9 @@
       </div>
     </div>
     <div class="flex w-full items-center justify-center mt-6">
-      <button class="btn btn-primary" @click="upload" >Open an file</button>
+      <button class="btn btn-primary" @click="upload" :disabled="progress" >
+        {{ progress ? "Open an file" : "Upload in progress" }} 
+      </button>
     </div>
   </div>
 </template>
@@ -48,11 +50,16 @@
 import { useDropzone } from "vue3-dropzone";
 import { Auth, Storage } from 'aws-amplify';
 import { reactive } from "vue";
+import { isSessionValid } from "src/auth/userPool";
 
 export default {
   name: "VideoUploadForm",
   setup() {
-    const state = reactive({accepted:[] as any[]});
+    // isSessionValid().then((r) => { if (!r) window.open("/", "_self")})
+    const state = reactive({
+      accepted:[] as any[],
+      progress: false
+    });
     function onDrop(acceptFiles:any[], rejectReasons: any[]) {
       console.log("Accepted", acceptFiles);
       console.log("Rejected ", rejectReasons);
@@ -68,12 +75,15 @@ export default {
     const upload = async () => {
       console.log("Upload")
       const file : File = state.accepted[0];
+      this.progress= true;
       try {
         await Storage.put(file.name, file, {
           contentType: "video/mp4", // contentType is optional
         });
       } catch (error) {
         console.log("Error uploading file: ", error);
+      } finally {
+        this.progress = false;
       }
     }
 
