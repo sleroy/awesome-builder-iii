@@ -1,0 +1,26 @@
+{'attachments': [
+        {'id': 'f4402e50-f647-4ac6-9ffa-4a4289f74972', 'type': 'ElasticNetworkInterface', 'status': 'ATTACHED', 'details': [
+                {'name': 'subnetId', 'value': 'subnet-0b4bb9659b37c088e'
+                },
+                {'name': 'networkInterfaceId', 'value': 'eni-0fe0302f26f4a808d'
+                },
+                {'name': 'macAddress', 'value': '02:ad: 5f: 80: 68: 19'
+                },
+                {'name': 'privateDnsName', 'value': 'ip-10-0-30-48.ec2.internal'
+                },
+                {'name': 'privateIPv4Address', 'value': '10.0.30.48'
+                }
+            ]
+        }
+    ], 'attributes': [
+        {'name': 'ecs.cpu-architecture', 'value': 'x86_64'
+        }
+    ], 'availabilityZone': 'us-east-1a', 'clusterArn': 'arn:aws:ecs:us-east-1: 841493508515:cluster/CloudVpcStack-VideoProcessingClusterE2F64E8F-9kKwaHfn3mLo', 'connectivity': 'CONNECTED', 'connectivityAt': '2023-04-14T16: 34: 12.727000+02: 00', 'containers': [
+        {'containerArn': 'arn:aws:ecs:us-east-1: 841493508515:container/CloudVpcStack-VideoProcessingClusterE2F64E8F-9kKwaHfn3mLo/e5152b7de1fa41978b8844a8b29f0dfc/5e8b0d7c-77d8-4304-8b43-210f94d109dd', 'taskArn': 'arn:aws:ecs:us-east-1: 841493508515:task/CloudVpcStack-VideoProcessingClusterE2F64E8F-9kKwaHfn3mLo/e5152b7de1fa41978b8844a8b29f0dfc', 'name': 'video-processing', 'image': '841493508515.dkr.ecr.us-east-1.amazonaws.com/cloudvpcstack-ecrecsimagerepository48ffd0ca-2u7po6ztauuv', 'imageDigest': 'sha256:b1c65e4c3868de47f3addd6b0f78f7d7a782945b8a54a22433084de6a6d1ba53', 'runtimeId': 'e5152b7de1fa41978b8844a8b29f0dfc-1871087200', 'lastStatus': 'RUNNING', 'networkBindings': [], 'networkInterfaces': [
+                {'attachmentId': 'f4402e50-f647-4ac6-9ffa-4a4289f74972', 'privateIpv4Address': '10.0.30.48'
+                }
+            ], 'healthStatus': 'UNKNOWN', 'cpu': '0'
+        }
+    ], 'cpu': '1024', 'createdAt': '2023-04-14T16: 34: 09.274000+02: 00', 'desiredStatus': 'RUNNING', 'enableExecuteCommand': False, 'group': 'family:CloudVpcStackApiTaskDefinition8802C989', 'healthStatus': 'UNKNOWN', 'lastStatus': 'RUNNING', 'launchType': 'FARGATE', 'memory': '2048', 'overrides': {'containerOverrides': [
+            {'name': 'video-processing', 'environment': [
+                    {'name': 'INPUT_VIDEO_FILE_URL', 'value': 's3: //841493508515-upload-bucket/customer-b/video4k.mp4'}, {'name': 'FFMPEG_OPTIONS', 'value': ''}, {'name': 'OUTPUT_FILENAME', 'value': '/tmp/video.mp4'}, {'name': 'OUTPUT_S3_PATH', 'value': 's3://841493508515-upload-bucket/customer-b/video4k.mp4.new'}, {'name': 'AWS_REGION', 'value': 'us-east-1'}]}], 'inferenceAcceleratorOverrides': []}, 'platformVersion': '1.4.0', 'platformFamily': 'Linux', 'pullStartedAt': '2023-04-14T16:34:19.803000+02:00', 'pullStoppedAt': '2023-04-14T16:34:33+02:00', 'startedAt': '2023-04-14T16:34:37.661000+02:00', 'startedBy': 'AWS Step Functions', 'tags': [], 'taskArn': 'arn:aws:ecs:us-east-1:841493508515:task/CloudVpcStack-VideoProcessingClusterE2F64E8F-9kKwaHfn3mLo/e5152b7de1fa41978b8844a8b29f0dfc', 'taskDefinitionArn': 'arn:aws:ecs:us-east-1:841493508515:task-definition/CloudVpcStackApiTaskDefinition8802C989:4', 'version': 3, 'ephemeralStorage': {'sizeInGiB': 25}}

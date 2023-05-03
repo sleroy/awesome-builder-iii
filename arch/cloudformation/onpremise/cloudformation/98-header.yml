@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: This template provision a VPC that emulates the On-premise environment.
+# aws ec2 describe-images --owners self amazon
+Mappings: 
+  RegionMap: 
+    us-east-1: 
+      "HVM64": "ami-02f3f602d23f1659d"
+    us-west-1: 
+      "HVM64": "ami-0bdb828fd58c52235"
+    eu-west-1: 
+      "HVM64": "ami-047bb4163c506cd98"
+    ap-southeast-1: 
+      "HVM64": "ami-08569b978cc4dfa10"
+    ap-northeast-1: 
+      "HVM64": "ami-06cd52961ce9f0d85"
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "Environment configuration"
+        Parameters:
+          - BusinessUnit
+          - Environment          
+      - Label:
+          default: VPC Configuration
+        Parameters:
+          - AvailabilityZone1
+          - pCidr
+      - Label:
+          default: File Gateway Instance Configuration
+        Parameters:
+          - type
+      - Label:
+          default: File Gateway EBS Configuration
+        Parameters:
+          - cacheSize
+      - Label:
+          default: Activation
+        Parameters:
+          - region
+    ParameterLabels:
+      BusinessUnit:
+        default: "Provides the Business Unit these resources"
+      Environment:
+        default: "Provides an environment (dev,test, prod)"
+      AvailabilityZone1:
+        default: "Provides an AVZ to deploy your subnets"
+      cacheSize:
+        default: 'Gateway Cache Disk Size (GP2):'
+      type:
+        default: 'Instance Type:'
+      region:
+        default: 'Activation region:'                
+      pCidr:
+        default: CIDR block for VPC and subnet        
+Parameters:
+  BusinessUnit:
+    Description: Defines the Business Unit that uses thes resources
+    Default: OnPremise
+    Type: String
+  Environment:
+    Description: Choose an environment where you want to create this stack
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - SIT
+      - UAT
+      - prod
+  AvailabilityZone1:
+      Description: Availability zone for the File gateway server
+      Type: AWS::EC2::AvailabilityZone::Name
+      Default: us-east-1a
+  pCidr:
+    Type: String
+    Default: 10.0.0.0/16
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$      
+  type:
+    Default: t3.medium 	
+    Type: String
+  region:
+    AllowedValues:
+      - us-east-1
+    Description: Remote region that the gateway volume data and management with reside in
+    Default: us-east-1
+    Type: String
