@@ -39,6 +39,8 @@ export default {
         await Auth.signOut({ global: true });
       } catch (error) {
         console.log('error signing out: ', error);
+      } finally {
+        window.open("/", "_self");
       }
     }
   },

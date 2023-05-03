@@ -7,7 +7,7 @@ baseFile=$(basename $OUTPUT_VIDEO)
 DIR="$(dirname "${OUTPUT_VIDEO}")"
 extension="${baseFile##*.}"
 filename="${baseFile%.*}"
-OUTPUT_S3_PATH="s3://$OUTPUT_BUCKET/$DIR/${filename}${RESOLUTION}${extension}"
+OUTPUT_S3_PATH="s3://$OUTPUT_BUCKET/$DIR/${filename}_${RESOLUTION}.${extension}"
 aws s3 cp ${INPUT_VIDEO_FILE_URL} ${TEMP_FILE}
 echo "ffmpeg -i ${TEMP_FILE} ${FFMPEG_OPTIONS} -y ${OUTPUT_FILENAME}"
 
@@ -21,7 +21,7 @@ if [ ${RES} -ne 0 ]; then
 fi
 if [ -f ${OUTPUT_FILENAME} ]; then
     echo "Copying ${OUTPUT_FILENAME} to S3 at ${OUTPUT_S3_PATH} ..."
-    aws s3 cp ./${OUTPUT_FILENAME} s3://${OUTPUT_S3_PATH} --region ${AWS_REGION}
+    aws s3 cp ${OUTPUT_FILENAME} ${OUTPUT_S3_PATH} --region ${AWS_REGION}
     exit 0;
 else
     echo "File has not been generated"
