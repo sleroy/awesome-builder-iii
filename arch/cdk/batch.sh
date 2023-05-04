@@ -1,6 +1,6 @@
 #!/bin/bash
 rm *.mp4
-VIDEO="/home/sleroy/git_remote/pexels-michal-marek-1409899-3840x2160-25fps.mp4"
+VIDEO="/tmp/video.mp4"
 if [ -f $VIDEO ]; then
     echo "File \"$VIDEO\" exists"
 else
@@ -11,4 +11,5 @@ else
 fi
 for i in {1..1}; do 
     aws s3 cp $VIDEO "s3://841493508515-customer-storage-hightier/customer-abc/$i.mp4" &
+    aws s3 cp $VIDEO "s3://841493508515-customer-storage-lowtier/customer-abc/$i.mp4" &
 done
