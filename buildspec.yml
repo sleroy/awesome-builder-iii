@@ -13,6 +13,7 @@ phases:
     commands:
       - echo Build started on `date`
       - npm run build
+      - aws s3 sync dist s3://841493508515-video-distribution --acl bucket-owner-full-control
   post_build:
     commands:
       - echo Build completed on `date`
