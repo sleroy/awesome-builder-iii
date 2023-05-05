@@ -18,5 +18,8 @@ phases:
     commands:
       - echo Build completed on `date`
 artifacts:
+  base-directory: 'dist*'
+  discard-paths: yes
   files:
-    - dist/**/*
+    - '**/*'
+  name: builds/$CODEBUILD_BUILD_NUMBER/website-artifact
