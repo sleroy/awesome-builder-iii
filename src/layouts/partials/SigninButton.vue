@@ -1,5 +1,5 @@
 <template>
-  <a class="btn btn-primary z-0 ml-auto py-[14px]" @click="action">
+  <a class="btn btn-primary z-0 ml-auto py-[14px] cursor-pointer" @click="action">
     {{ !isLoggedIn ? lbl_signin : lbl_signout }}
   </a>
 </template>
