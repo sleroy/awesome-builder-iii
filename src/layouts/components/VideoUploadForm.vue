@@ -61,10 +61,7 @@
 <script lang="ts">
 import { useDropzone } from "vue3-dropzone";
 import { reactive, ref, computed } from "vue";
-import AWS from 'aws-sdk';
-import awsmobile from '../../aws-exports';
 import credentials from '../../credentials.json'
-import S3 from 'aws-sdk/clients/s3'
 import { Storage, Auth } from "aws-amplify";
 
 export default {
