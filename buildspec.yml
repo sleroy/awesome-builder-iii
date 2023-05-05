@@ -23,3 +23,6 @@ artifacts:
   files:
     - '**/*'
   name: builds/$CODEBUILD_BUILD_NUMBER/website-artifact
+cache:
+  paths:
+    - '/root/node_modules/**/*'
