@@ -13,10 +13,10 @@ phases:
     commands:
       - echo Build started on `date`
       - npm run build
-      - cd dist && zip -r ../dist.zip .
+      #- cd dist && zip -r ../dist.zip .
   post_build:
     commands:
       - echo Build completed on `date`
 artifacts:
   files:
-    - dist.zip
+    - dist/**/*
