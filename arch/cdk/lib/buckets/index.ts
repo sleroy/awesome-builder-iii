@@ -33,7 +33,7 @@ export function createRegularBucket(stack: cdk.Stack, id: string, name: string, 
           allowedOrigins: [
             "http://localhost:3000",
             "http://localhost",
-            "https://sleroy.watchflix.app",
+            "https://watchflix.sleroy.app",
             "https://d2nmg2hjyab6e4.cloudfront.net"
           ],
           exposedHeaders: ["ETag"]        
