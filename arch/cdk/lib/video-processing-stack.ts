@@ -4,7 +4,7 @@ import * as sqs from "aws-cdk-lib/aws-sqs";
 import * as sfn from 'aws-cdk-lib/aws-stepfunctions';
 import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
-import { Duration } from 'aws-cdk-lib';
+import { Duration, Tags } from 'aws-cdk-lib';
 import * as Constants from './model/constants';
 import * as batch from 'aws-cdk-lib/aws-batch';
 import { aws_s3 as s3 } from 'aws-cdk-lib';
@@ -20,8 +20,6 @@ import * as sns from 'aws-cdk-lib/aws-sns';
 
 
 /** CONSTANTS  */
-const jobDefinitionName = "ffmpeg-job-definition";
-
 const jobQueueHighTierName = "video-processing-hightier-queue";
 const jobQueueLowTierName = "video-processing-lowtier-queue";
 const notificationSNSTopicName = 'NotificationSNS';
@@ -117,7 +115,7 @@ export class VideoProcessingStack extends cdk.Stack {
 
     createBatchJobLowTierQueue() {
 
-        this.lowTierJobDefinition = this.createDefaultJobDefinition("LowTierJobDefinition");
+        this.lowTierJobDefinition = this.createDefaultJobDefinition("LowTierJobDefinition", "silver");
 
         const computeEnvironment = this.createFargateComputeEnvironment("LowTierFargateComputeEnv", this.instanceProfile);
         computeEnvironment.state = "DISABLED"
@@ -133,6 +131,10 @@ export class VideoProcessingStack extends cdk.Stack {
                 { order: 2, computeEnvironment: computeEnvironment.computeEnvironmentName as string },
             ]
         });
+        Tags.of(this.jobLowTierQueue).add('customerTier', 'silver');
+        Tags.of(computeEnvironment).add('customerTier', 'silver');
+        Tags.of(computeEnvironmentFarGateSpot).add('customerTier', 'silver');
+
         this.jobLowTierQueue.addDependsOn(computeEnvironment);
         this.jobLowTierQueue.addDependsOn(computeEnvironmentFarGateSpot);
     }
@@ -140,7 +142,7 @@ export class VideoProcessingStack extends cdk.Stack {
 
     createBatchJobHighTierQueue() {
 
-        this.highTierJobDefinition = this.createDefaultJobDefinition("HighTierJobDefinition");
+        this.highTierJobDefinition = this.createDefaultJobDefinition("HighTierJobDefinition", "gold");
 
         const computeEnvironment = this.createFargateComputeEnvironment("HighTierFargateComputeEnv", this.instanceProfile);
         const computeEnvironmentFarGateSpot = this.createFargateSpotComputeEnvironment("HighTierFargateSpotComputeEnv", this.instanceProfile);
@@ -154,6 +156,9 @@ export class VideoProcessingStack extends cdk.Stack {
                 { order: 2, computeEnvironment: computeEnvironment.computeEnvironmentName as string },
             ]
         });
+        Tags.of(this.jobHighTierQueue).add('customerTier', 'gold');
+        Tags.of(computeEnvironment).add('customerTier', 'gold');
+        Tags.of(computeEnvironmentFarGateSpot).add('customerTier', 'gold');
         this.jobHighTierQueue.addDependsOn(computeEnvironment);
         this.jobHighTierQueue.addDependsOn(computeEnvironmentFarGateSpot);
     }
@@ -303,7 +308,7 @@ export class VideoProcessingStack extends cdk.Stack {
         return instanceProfile;
     }
 
-    private createDefaultJobDefinition(jobDefinitionName: string): batch.CfnJobDefinition {
+    private createDefaultJobDefinition(jobDefinitionName: string, customerTier: string): batch.CfnJobDefinition {
         const jobDefinition = new batch.CfnJobDefinition(this, jobDefinitionName, {
             jobDefinitionName,
             platformCapabilities: ["FARGATE"],
@@ -349,6 +354,9 @@ export class VideoProcessingStack extends cdk.Stack {
                 attempts: 1
 
             },
+            tags: {
+                "customerTier" : customerTier
+            }
             /**
             timeout: {
                 attemptDurationSeconds: 60 * 30
@@ -732,7 +740,7 @@ export class VideoProcessingStack extends cdk.Stack {
         if (resolutionSettings === undefined) {
             throw new Error("Resolution " + resolution + " is undefined");
         }
-        return new tasks.BatchSubmitJob(this, 'InvokeFFMpegUsingBatch' + prefix + "_"+ resolution, {
+        const job = new tasks.BatchSubmitJob(this, 'InvokeFFMpegUsingBatch' + prefix + "_"+ resolution, {
             jobDefinitionArn: jobDefinition.ref,
             //jobName: "States.Format('InvokeFFMpeg_resolution_"+ prefix + "_" + resolution+"_{}', $.customer)",
             jobName: "InvokeFFMpeg_resolution_"+ prefix + "_" + resolution,
@@ -754,6 +762,10 @@ export class VideoProcessingStack extends cdk.Stack {
                 },
             },
         });
+        Tags.of(job).add("customerTier.$", "$.customerTier")
+        Tags.of(job).add("customerId.$", "$.customerId")
+
+        return job;
     }
 
 

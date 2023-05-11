@@ -10,6 +10,7 @@ else
     #wget https://file-examples.com/wp-content/uploads/2017/04/file_example_MP4_480_1_5MG.mp4 -O $VIDEO
 fi
 for i in {1..1}; do 
+    echo "aws s3 cp $VIDEO 's3://841493508515-customer-storage-hightier/customer-abc/$i.mp4'"
     aws s3 cp $VIDEO "s3://841493508515-customer-storage-hightier/customer-abc/$i.mp4" &
     aws s3 cp $VIDEO "s3://841493508515-customer-storage-lowtier/customer-abc/$i.mp4" &
 done
